@@ -1,8 +1,8 @@
-"""initial_tables
+"""create_tables
 
-Revision ID: 5f12bb823287
+Revision ID: 094d6ca5e338
 Revises: 
-Create Date: 2026-01-02 16:09:28.287285
+Create Date: 2026-01-07 13:59:10.488357
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '5f12bb823287'
+revision: str = '094d6ca5e338'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -32,7 +32,7 @@ def upgrade() -> None:
     op.create_table('entities',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(), nullable=False),
-    sa.Column('type', sa.String(), nullable=True),
+    sa.Column('type', sa.Enum('dataset', 'method', 'task', 'library', name='entitytype'), nullable=True),
     sa.Column('canonical_id', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['canonical_id'], ['entities.id'], ),
@@ -43,15 +43,15 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('arxiv_id', sa.String(), nullable=False),
     sa.Column('title', sa.String(), nullable=False),
-    sa.Column('summary', sa.Text(), nullable=True),
+    sa.Column('abstract', sa.Text(), nullable=True),
     sa.Column('authors', sa.ARRAY(sa.String()), nullable=True),
     sa.Column('published_at', sa.DateTime(), nullable=True),
     sa.Column('categories', sa.ARRAY(sa.String()), nullable=True),
     sa.Column('url', sa.String(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('arxiv_id')
+    sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_papers_arxiv_id'), 'papers', ['arxiv_id'], unique=True)
     op.create_index(op.f('ix_papers_published_at'), 'papers', ['published_at'], unique=False)
     op.create_table('paper_entities',
     sa.Column('paper_id', sa.Integer(), nullable=False),
@@ -86,6 +86,7 @@ def downgrade() -> None:
     op.drop_index('ix_paper_entities_entity_id', table_name='paper_entities')
     op.drop_table('paper_entities')
     op.drop_index(op.f('ix_papers_published_at'), table_name='papers')
+    op.drop_index(op.f('ix_papers_arxiv_id'), table_name='papers')
     op.drop_table('papers')
     op.drop_index(op.f('ix_entities_type'), table_name='entities')
     op.drop_table('entities')

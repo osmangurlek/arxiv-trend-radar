@@ -5,6 +5,7 @@ A system for tracking and analyzing trends in arXiv research papers. This projec
 ## Tech Stack
 
 - **Python 3.13+**
+- **FastAPI** - Web framework
 - **PostgreSQL** - Primary database
 - **SQLAlchemy** - ORM
 - **Alembic** - Database migrations
@@ -15,10 +16,25 @@ A system for tracking and analyzing trends in arXiv research papers. This projec
 | Table | Description |
 |-------|-------------|
 | `papers` | arXiv papers with title, summary, authors, categories |
-| `entities` | Extracted entities (models, datasets, methods) |
+| `entities` | Extracted entities (models, datasets, methods, tasks, libraries) |
 | `paper_entities` | Many-to-many relation between papers and entities |
 | `paper_tags` | Tags assigned to papers with confidence scores |
 | `digests` | Weekly markdown digest summaries |
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/ingest` | POST | Fetch papers from arXiv and store in database |
+| `/papers` | GET | Get all papers with pagination |
+| `/papers/{id}` | GET | Get a single paper by ID |
+| `/health` | GET | Health check endpoint |
+
+### Ingest Endpoint Parameters
+
+- `query` (required): Search query (e.g., "retrieval augmented generation")
+- `days` (optional): Number of days to look back (default: 7)
+- `limit` (optional): Maximum number of papers to fetch (default: 50)
 
 ## Setup
 
@@ -66,6 +82,20 @@ A system for tracking and analyzing trends in arXiv research papers. This projec
    alembic upgrade head
    ```
 
+## Running the Application
+
+### Start the FastAPI server
+```bash
+uvicorn backend.app.main:app --reload
+```
+
+The API will be available at `http://localhost:8000`
+
+### API Documentation
+
+Once the server is running, you can access:
+- Swagger UI: `http://localhost:8000/docs`
+
 ## Project Structure
 
 ```
@@ -76,8 +106,16 @@ arxiv-trend-radar/
 ├── .env                     # Environment variables (gitignored)
 └── backend/
     ├── app/
-    │   ├── models.py        # SQLAlchemy models
-    │   └── ingest.py        # arXiv paper ingestion
+    │   ├── main.py              # FastAPI application entry point
+    │   ├── database.py          # Database connection setup
+    │   ├── models/
+    │   │   └── models.py        # SQLAlchemy models
+    │   ├── schemas/
+    │   │   └── schemas.py       # Pydantic schemas
+    │   ├── repositories/
+    │   │   └── paper_repo.py    # Data access layer
+    │   └── services/
+    │       └── ingestion_services.py  # Business logic
     └── db/
         ├── env.py           # Alembic environment
         └── versions/        # Migration files
@@ -98,4 +136,19 @@ alembic upgrade head
 ### Rollback migration
 ```bash
 alembic downgrade -1
+```
+
+### Show current migration
+```bash
+alembic current
+```
+
+### Show history of migrations
+```bash
+alembic history
+```
+
+### Mark the database with a specific revision (without running migrations)
+```bash
+alembic stamp <revision>
 ```
