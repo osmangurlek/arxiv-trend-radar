@@ -111,3 +111,16 @@ class Digest(DigestCreate):
 
     class Config:
         from_attributes = True
+
+
+# ============== Step-A: LLM Extraction Schemas ==============
+class ExtractedEntity(BaseModel):
+    name: str = Field(description="Entities technical name")
+    evidence: str = Field(description="Evidence from the paper")
+    confidence: float = Field(description="Confidence score", ge=0.0, le=1.0)
+
+class PaperExtractionSchema(BaseModel):
+    tasks: List[ExtractedEntity] = Field(description="Tasks or problems solved in the paper (e.g., Image Classification)")
+    datasets: List[ExtractedEntity] = Field(description="Datasets used in the paper (e.g., ImageNet)")
+    methods: List[ExtractedEntity] = Field(description="Methods or architectures used (e.g., CNN, Adam Optimizer)")
+    libraries: List[ExtractedEntity] = Field(description="Libraries or tools used (e.g., LangChain, TensorFlow)")
