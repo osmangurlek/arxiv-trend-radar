@@ -1,6 +1,6 @@
 # arXiv Trend Radar
 
-A system for tracking and analyzing trends in arXiv research papers. This project ingests papers from arXiv, extracts entities (models, datasets, methods), tags papers, and generates weekly digest summaries.
+A system for tracking and analyzing trends in arXiv research papers. This project ingests papers from arXiv, extracts entities (models, datasets, methods) using LLM, stores everything in PostgreSQL, and provides trend analytics.
 
 ## Tech Stack
 
@@ -9,32 +9,27 @@ A system for tracking and analyzing trends in arXiv research papers. This projec
 - **PostgreSQL** - Primary database
 - **SQLAlchemy** - ORM
 - **Alembic** - Database migrations
+- **LangChain + Gemini** - LLM entity extraction
 - **Docker Compose** - Container orchestration
+
+## Features
+
+- ✅ **Paper Ingestion** - Fetch papers from arXiv API
+- ✅ **LLM Entity Extraction** - Extract tasks, datasets, methods, libraries from abstracts
+- ✅ **CLI Tool** - Command-line interface for ingestion
+- ⬜ **SQL Analytics** - Trend queries (coming soon)
+- ⬜ **FastAPI Endpoints** - REST API (coming soon)
+- ⬜ **Streamlit UI** - Dashboard (coming soon)
 
 ## Database Schema
 
 | Table | Description |
 |-------|-------------|
-| `papers` | arXiv papers with title, summary, authors, categories |
-| `entities` | Extracted entities (models, datasets, methods, tasks, libraries) |
-| `paper_entities` | Many-to-many relation between papers and entities |
-| `paper_tags` | Tags assigned to papers with confidence scores |
+| `papers` | arXiv papers with title, abstract, authors, categories |
+| `entities` | Extracted entities (dataset, method, task, library) |
+| `paper_entities` | Many-to-many relation between papers and entities with evidence |
+| `paper_tags` | Taxonomy tags assigned to papers with confidence scores |
 | `digests` | Weekly markdown digest summaries |
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/ingest` | POST | Fetch papers from arXiv and store in database |
-| `/papers` | GET | Get all papers with pagination |
-| `/papers/{id}` | GET | Get a single paper by ID |
-| `/health` | GET | Health check endpoint |
-
-### Ingest Endpoint Parameters
-
-- `query` (required): Search query (e.g., "retrieval augmented generation")
-- `days` (optional): Number of days to look back (default: 7)
-- `limit` (optional): Maximum number of papers to fetch (default: 50)
 
 ## Setup
 
@@ -42,7 +37,7 @@ A system for tracking and analyzing trends in arXiv research papers. This projec
 
 - Python 3.13+
 - Docker & Docker Compose
-- PostgreSQL (via Docker)
+- Gemini API Key
 
 ### Installation
 
@@ -65,10 +60,13 @@ A system for tracking and analyzing trends in arXiv research papers. This projec
 
 4. **Create `.env` file**
    ```bash
-   echo 'POSTGRES_URL=postgresql://USERNAME:PASSWORD@localhost:5432/DB_NAME
-   POSTGRES_USER=USERNAME
-   POSTGRES_PASSWORD=PASSWORD
-   POSTGRES_DB=DB_NAME' > .env
+   cat > .env << EOF
+   POSTGRES_URL=postgresql://YOUR_DB_USERNAME:YOUR_DB_PASSWORD@localhost:5432/YOUR_DB_NAME
+   POSTGRES_USER=YOUR_DB_USERNAME
+   POSTGRES_PASSWORD=YOUR_DB_PASSWORD
+   POSTGRES_DB=YOUR_DB_NAME
+   GEMINI_API_KEY=your_gemini_api_key_here
+   EOF
    ```
 
 5. **Start PostgreSQL**
@@ -78,28 +76,39 @@ A system for tracking and analyzing trends in arXiv research papers. This projec
 
 6. **Run migrations**
    ```bash
-   alembic revision --autogenerate -m "description"
    alembic upgrade head
    ```
 
-## Running the Application
+## Usage
 
-### Start the FastAPI server
+### CLI - Ingest Papers
+
+```bash
+# Activate virtual environment
+source env/bin/activate
+
+# Ingest papers with entity extraction
+python cli.py ingest --query "retrieval augmented generation" --limit 10
+
+# Generate digest (coming soon)
+python cli.py digest --week-start 2026-01-01
+```
+
+### FastAPI Server
+
 ```bash
 uvicorn backend.app.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000`
 
-### API Documentation
-
-Once the server is running, you can access:
 - Swagger UI: `http://localhost:8000/docs`
 
 ## Project Structure
 
 ```
 arxiv-trend-radar/
+├── cli.py                   # CLI tool for ingestion
 ├── alembic.ini              # Alembic configuration
 ├── docker-compose.yml       # Docker services
 ├── requirements.txt         # Python dependencies
@@ -113,13 +122,27 @@ arxiv-trend-radar/
     │   ├── schemas/
     │   │   └── schemas.py       # Pydantic schemas
     │   ├── repositories/
-    │   │   └── paper_repo.py    # Data access layer
-    │   └── services/
-    │       └── ingestion_services.py  # Business logic
+    │   │   ├── paper_repo.py    # Paper data access layer
+    │   │   └── entity_repo.py   # Entity data access layer
+    │   ├── services/
+    │   │   └── ingestion_services.py  # Ingestion business logic
+    │   └── llm/
+    │       └── entity_extraction.py   # LLM entity extraction service
     └── db/
         ├── env.py           # Alembic environment
         └── versions/        # Migration files
 ```
+
+## How Entity Extraction Works
+
+1. **Fetch papers** from arXiv API based on search query
+2. **Save papers** to PostgreSQL (idempotent, no duplicates)
+3. **Extract entities** from each abstract using Gemini LLM:
+   - **Tasks**: Research problems (e.g., "Image Classification")
+   - **Datasets**: Named datasets (e.g., "ImageNet", "MS MARCO")
+   - **Methods**: Algorithms/architectures (e.g., "Transformer", "RAG")
+   - **Libraries**: Tools/frameworks (e.g., "PyTorch", "LangChain")
+4. **Store entities** with evidence quotes and confidence scores
 
 ## Development
 
@@ -136,19 +159,4 @@ alembic upgrade head
 ### Rollback migration
 ```bash
 alembic downgrade -1
-```
-
-### Show current migration
-```bash
-alembic current
-```
-
-### Show history of migrations
-```bash
-alembic history
-```
-
-### Mark the database with a specific revision (without running migrations)
-```bash
-alembic stamp <revision>
 ```

@@ -27,3 +27,26 @@ class PaperRepository:
             self.db.execute(stmt)
 
         self.db.commit()
+
+    def upsert_paper(self, data: dict) -> Paper:
+        """
+        Upserts a single paper and returns the Paper object.
+        Needed for entity extraction which requires paper ID.
+        """
+        existing = self.db.query(Paper).filter(Paper.arxiv_id == data["arxiv_id"]).first()
+        
+        if existing:
+            return existing
+        
+        paper = Paper(
+            arxiv_id=data["arxiv_id"],
+            title=data["title"],
+            abstract=data["abstract"],
+            authors=data["authors"],
+            published_at=data["published_at"],
+            categories=data["categories"],
+            url=data["url"],
+        )
+        self.db.add(paper)
+        self.db.flush()
+        return paper
