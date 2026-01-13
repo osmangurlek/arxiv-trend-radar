@@ -38,11 +38,14 @@ class IngestionService:
             # 1. Save paper and get the object (for ID)
             paper = self.paper_repo.upsert_paper(paper_data)
             
-            # 2. Perform entity extraction with LLM
-            extraction = await self.llm_service.extract_entities(paper_data["abstract"])
-            
-            # 3. Save extracted entities to DB
-            self._save_extracted_entities(paper.id, extraction)
+            # 2. Perform entity extraction with LLM (with error handling)
+            try:
+                extraction = await self.llm_service.extract_entities(paper_data["abstract"])
+                # 3. Save extracted entities to DB
+                self._save_extracted_entities(paper.id, extraction)
+            except Exception as e:
+                print(f"⚠️  Entity extraction failed for paper {paper.id}: {e}")
+                # Continue with next paper even if extraction fails
 
         return len(results)
 

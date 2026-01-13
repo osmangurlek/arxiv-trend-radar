@@ -17,8 +17,8 @@ A system for tracking and analyzing trends in arXiv research papers. This projec
 - ✅ **Paper Ingestion** - Fetch papers from arXiv API
 - ✅ **LLM Entity Extraction** - Extract tasks, datasets, methods, libraries from abstracts
 - ✅ **CLI Tool** - Command-line interface for ingestion
-- ⬜ **SQL Analytics** - Trend queries (coming soon)
-- ⬜ **FastAPI Endpoints** - REST API (coming soon)
+- ✅ **SQL Analytics** - Trend queries and analytics repository
+- ✅ **FastAPI Endpoints** - REST API with papers, entities, and trends routers
 - ⬜ **Streamlit UI** - Dashboard (coming soon)
 
 ## Database Schema
@@ -121,9 +121,14 @@ arxiv-trend-radar/
     │   │   └── models.py        # SQLAlchemy models
     │   ├── schemas/
     │   │   └── schemas.py       # Pydantic schemas
+    │   ├── api/
+    │   │   ├── papers_router.py   # Papers endpoints
+    │   │   ├── entities_router.py # Entities endpoints
+    │   │   └── trends_router.py   # Trends analytics endpoints
     │   ├── repositories/
-    │   │   ├── paper_repo.py    # Paper data access layer
-    │   │   └── entity_repo.py   # Entity data access layer
+    │   │   ├── paper_repo.py      # Paper data access layer
+    │   │   ├── entity_repo.py     # Entity data access layer
+    │   │   └── analytics_repo.py  # SQL analytics queries
     │   ├── services/
     │   │   └── ingestion_services.py  # Ingestion business logic
     │   └── llm/

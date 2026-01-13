@@ -112,6 +112,42 @@ class Digest(DigestCreate):
     class Config:
         from_attributes = True
 
+# ============== Analytics Response Schemas ==============
+
+class TopEntityResponse(BaseModel):
+    name: str
+    count: int
+
+class GrowthEntityResponse(BaseModel):
+    name: str
+    growth: int
+
+class CooccurrenceResponse(BaseModel):
+    entity_a: str
+    entity_b: str
+    cooccurrence_count: int
+
+class PaperWithEvidenceResponse(BaseModel):
+    id: int
+    title: str
+    authors: List[str]
+    published_at: datetime
+    evidence: Optional[str]
+    confidence: Optional[float]
+
+class WeeklyTrendsResponse(BaseModel):
+    top_entities: List[TopEntityResponse]
+    fastest_growing: List[GrowthEntityResponse]
+
+class CategoryDistributionResponse(BaseModel):
+    week: datetime
+    category: str
+    count: int
+
+class CanonicalMergeResponse(BaseModel):
+    canonical_name: str
+    aliases: List[str]
+
 
 # ============== Step-A: LLM Extraction Schemas ==============
 class ExtractedEntity(BaseModel):
