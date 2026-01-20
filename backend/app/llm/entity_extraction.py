@@ -1,4 +1,5 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
+import asyncio
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from backend.app.schemas.schemas import PaperExtractionSchema
 
@@ -39,10 +40,12 @@ Remember: Extract specific technical terms in Title Case, not long phrases."""
 
 class LLMService:
     def __init__(self, api_key: str):
-        self.llm = ChatGoogleGenerativeAI(
+        self.llm = ChatOpenAI(
             api_key=api_key,
-            model="gemini-3-flash-preview",
-            temperature=0
+            base_url="https://openrouter.ai/api/v1",
+            model="openai/gpt-5.2",
+            temperature=0,
+            max_tokens=2000
         )
 
         self.structured_llm = self.llm.with_structured_output(PaperExtractionSchema)
@@ -52,7 +55,20 @@ class LLMService:
             ("user", USER_PROMPT)
         ])
 
-    async def extract_entities(self, abstract: str) -> PaperExtractionSchema:
+    async def extract_entities(self, abstract: str, max_retries: int = 3) -> PaperExtractionSchema:
         chain = self.prompt | self.structured_llm
-        result = await chain.ainvoke({"abstract": abstract})
-        return result
+        
+        for attempt in range(max_retries):
+            try:
+                result = await chain.ainvoke({"abstract": abstract})
+                return result
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                    wait_time = (attempt + 1) * 10  # 10s, 20s, 30s
+                    print(f"⏳ Rate limited, waiting {wait_time}s before retry {attempt + 1}/{max_retries}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise e
+        
+        raise Exception(f"Failed after {max_retries} retries due to rate limiting")
