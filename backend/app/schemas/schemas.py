@@ -160,3 +160,19 @@ class PaperExtractionSchema(BaseModel):
     datasets: List[ExtractedEntity] = Field(description="Datasets used in the paper (e.g., ImageNet)")
     methods: List[ExtractedEntity] = Field(description="Methods or architectures used (e.g., CNN, Adam Optimizer)")
     libraries: List[ExtractedEntity] = Field(description="Libraries or tools used (e.g., LangChain, TensorFlow)")
+
+# ============== LLM Step B: Paper Classification ==============
+class PaperClassificationTag(BaseModel):
+    tag: str = Field(description="Taxonomy tag for the paper")
+    confidence: float = Field(description="Confidence score", ge=0.0, le=1.0)
+
+class PaperClassificationSchema(BaseModel):
+    tags: List[PaperClassificationTag] = Field(description="List of taxonomy tags for the paper")
+
+# ============== LLM Step C: Entity Canonicalization ==============
+class CanonicalGroup(BaseModel):
+    canonical: str = Field(description="The canonical (main) name for this entity")
+    aliases: List[str] = Field(description="List of alternative names for this entity")
+
+class CanonicalizationSchema(BaseModel):
+    groups: List[CanonicalGroup] = Field(description="List of canonical entity groups")

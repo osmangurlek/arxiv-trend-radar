@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from backend.app.models import models
 
 def get_top_entities_by_week(db: Session, week_start: datetime, entity_type: str, limit: int = 10):
-    week_end = week_start + timedelta(days=7)
+    week_end = week_start + timedelta(days=8)
 
     return db.query(
         models.Entity.name,
