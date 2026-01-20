@@ -2,14 +2,16 @@ import arxiv
 from backend.app.repositories.paper_repo import PaperRepository
 from backend.app.repositories.entity_repo import EntityRepository
 from backend.app.llm.entity_extraction import LLMService
+from backend.app.llm.paper_classification import ClassificationService
 from backend.app.models.models import EntityType
 from backend.app.schemas.schemas import PaperExtractionSchema
 
 class IngestionService:
-    def __init__(self, paper_repo: PaperRepository, entity_repo: EntityRepository, llm_service: LLMService):
+    def __init__(self, paper_repo: PaperRepository, entity_repo: EntityRepository, llm_service: LLMService, classification_service: ClassificationService):
         self.paper_repo = paper_repo
         self.entity_repo = entity_repo
         self.llm_service = llm_service
+        self.classification_service = classification_service
 
     async def fetch_and_save(self, query: str, max_results: int = 10):
         """
@@ -46,6 +48,14 @@ class IngestionService:
             except Exception as e:
                 print(f"⚠️  Entity extraction failed for paper {paper.id}: {e}")
                 # Continue with next paper even if extraction fails
+
+            # 4. Classify Paper
+            try:
+                classification = await self.classification_service.classify_paper(paper_data["abstract"])
+                for tag_item in classification.tags:
+                    self.paper_repo.add_paper_tag(paper.id, tag_item.tag, tag_item.confidence)
+            except Exception as e:
+                print(f"⚠️  Classification failed for paper {paper.id}: {e}")
 
         return len(results)
 

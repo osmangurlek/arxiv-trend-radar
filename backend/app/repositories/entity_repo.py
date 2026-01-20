@@ -35,3 +35,19 @@ class EntityRepository:
         self.db.add(paper_entity)
         self.db.flush()
         return paper_entity
+
+    def get_entities_without_canonical(self):
+        """Get all entities that don't have a canonical_id set"""
+        return self.db.query(Entity).filter(Entity.canonical_id.is_(None)).all()
+
+    def set_canonical_id(self, alias_id: int, canonical_id: int):
+        """Set the canonical_id for an alias entity"""
+        entity = self.db.query(Entity).filter(Entity.id == alias_id).first()
+        if entity:
+            entity.canonical_id = canonical_id
+            self.db.flush()
+        return entity
+
+    def get_entity_by_name(self, name: str):
+        """Get entity by name"""
+        return self.db.query(Entity).filter(Entity.name == name).first()
