@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from typing import List
 from sqlalchemy.dialects.postgresql import insert
-from backend.app.models.models import Paper
+from backend.app.models.models import Paper, PaperTag
 
 class PaperRepository:
     def __init__(self, db: Session):
@@ -50,3 +50,22 @@ class PaperRepository:
         self.db.add(paper)
         self.db.flush()
         return paper
+
+    def add_paper_tag(self, paper_id: int, tag: str, confidence: float):
+        """Add a taxonomy tag to a paper"""
+        existing = self.db.query(PaperTag).filter(
+            PaperTag.paper_id == paper_id,
+            PaperTag.tag == tag
+        ).first()
+
+        if existing:
+            return existing
+        
+        paper_tag = PaperTag(
+            paper_id=paper_id,
+            tag=tag,
+            confidence=confidence
+        )
+        self.db.add(paper_tag)
+        self.db.flush()
+        return paper_tag
