@@ -1,10 +1,12 @@
 """
 ArXiv Trend Radar - FastAPI Application
 """
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
+import logging
 import os
-import asyncio
+
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
 from backend.app.database import SessionLocal, engine
 from backend.app.models import models
@@ -15,6 +17,7 @@ from backend.app.llm.entity_extraction import LLMService
 from backend.app.llm.paper_classification import ClassificationService
 from backend.app.api import papers_router, trends_router, entities_router, digest_router
 
+logger = logging.getLogger(__name__)
 
 # Create tables on startup
 models.Base.metadata.create_all(bind=engine)
@@ -33,6 +36,17 @@ app = FastAPI(
     title="ArXiv Trend Radar",
     description="Research intelligence product for arXiv papers",
     version="0.1.0"
+)
+
+_cors_origins = ["http://localhost:8501", "http://127.0.0.1:8501"]
+if os.environ.get("CORS_ORIGIN"):
+    _cors_origins.append(os.environ.get("CORS_ORIGIN", "").rstrip("/"))
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(papers_router.router)
@@ -74,17 +88,25 @@ async def ingest_papers(
             classification_service=classification_service
         )
         
-        count = await service.fetch_and_save(query=query, max_results=limit)
+        count, saved_papers = await service.fetch_and_save(query=query, max_results=limit)
         db.commit()
         
         return {
             "message": f"Successfully ingested {count} papers",
             "query": query,
-            "papers_added": count
+            "papers_added": count,
+            "papers": saved_papers,
         }
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Ingest failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Ingestion failed. Check server logs for details."
+        )
 
 # ============== Health Check ==============
 

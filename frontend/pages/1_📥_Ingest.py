@@ -3,6 +3,18 @@ Ingest Page - Fetch papers from arXiv
 """
 import streamlit as st
 import requests
+import json
+
+
+def _safe_json(response):
+    """Parse JSON response safely; return None or dict. Avoids 'Expecting value: line 1 column 1' on empty/non-JSON."""
+    if not response.text or not response.text.strip():
+        return None
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        return None
+
 
 st.set_page_config(page_title="Ingest Papers", page_icon="📥", layout="wide")
 
@@ -77,21 +89,34 @@ if submitted:
                 )
                 
                 if response.status_code == 200:
-                    result = response.json()
-                    st.success(f"✅ {result['message']}")
-                    
-                    st.markdown("### 📊 Ingestion Results")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Query", result.get("query", query))
-                    with col2:
-                        st.metric("Papers Added", result.get("papers_added", 0))
-                    with col3:
-                        st.metric("Status", "Success ✓")
-                    
-                    st.info("💡 Visit the **Trends** page to see the extracted entities!")
+                    result = _safe_json(response)
+                    if result is None:
+                        st.error("❌ Invalid response from server.")
+                    else:
+                        st.success(f"✅ {result['message']}")
+                        
+                        st.markdown("### 📊 Ingestion Results")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Query", result.get("query", query))
+                        with col2:
+                            st.metric("Papers Added", result.get("papers_added", 0))
+                        with col3:
+                            st.metric("Status", "Success ✓")
+                        
+                        # Show ingested papers as messages
+                        papers = result.get("papers") or []
+                        if papers:
+                            st.markdown("### 📄 Ingested Papers")
+                            for p in papers:
+                                title = (p.get("title") or "")[:100]
+                                arxiv_id = p.get("arxiv_id", "")
+                                pub = (p.get("published_at") or "")[:10]
+                                st.info(f"📄 **{title}**{'…' if len(p.get('title','')) > 100 else ''}  \n`{arxiv_id}` · Published {pub}")
+                        st.success("💡 Visit the **Trends** page to see the extracted entities!")
                 else:
-                    st.error(f"❌ Error: {response.json().get('detail', 'Unknown error')}")
+                    err_detail = _safe_json(response)
+                    st.error(f"❌ Error: {(err_detail or {}).get('detail', response.text or 'Unknown error')}")
             except requests.exceptions.Timeout:
                 st.error("❌ Request timed out. The ingestion might still be running on the server.")
             except requests.exceptions.ConnectionError:
@@ -111,15 +136,33 @@ try:
         papers = response.json()
         
         if papers:
+            from collections import OrderedDict
+            from datetime import datetime as _dt
+
+            groups: OrderedDict = OrderedDict()
             for paper in papers:
-                with st.expander(f"📄 {paper['title'][:80]}...", expanded=False):
-                    st.markdown(f"**ArXiv ID:** `{paper['arxiv_id']}`")
-                    st.markdown(f"**Authors:** {', '.join(paper['authors'][:3])}{'...' if len(paper['authors']) > 3 else ''}")
-                    st.markdown(f"**Published:** {paper['published_at'][:10]}")
-                    st.markdown(f"**Categories:** {', '.join(paper['categories'])}")
-                    st.markdown("**Abstract:**")
-                    st.caption(paper['abstract'][:500] + "..." if len(paper['abstract']) > 500 else paper['abstract'])
-                    st.markdown(f"[View on arXiv]({paper['url']})")
+                # Group by ingest date-time (minute precision)
+                raw = paper.get("created_at") or ""
+                try:
+                    dt = _dt.fromisoformat(raw.replace("Z", "+00:00"))
+                    group_key = dt.strftime("%b %d, %Y  %H:%M")
+                except Exception:
+                    group_key = raw[:16] if raw else "Unknown"
+                groups.setdefault(group_key, []).append(paper)
+
+            for group_label, group_papers in groups.items():
+                st.markdown(f"**📅 Ingested: {group_label}** — {len(group_papers)} paper{'s' if len(group_papers) != 1 else ''}")
+                for paper in group_papers:
+                    title_short = paper['title'][:90] + ('…' if len(paper['title']) > 90 else '')
+                    with st.expander(f"📄 {title_short}", expanded=False):
+                        st.markdown(f"**ArXiv ID:** `{paper['arxiv_id']}`")
+                        st.markdown(f"**Authors:** {', '.join(paper['authors'][:3])}{'...' if len(paper['authors']) > 3 else ''}")
+                        st.markdown(f"**Published:** {paper['published_at'][:10]}")
+                        st.markdown(f"**Categories:** {', '.join(paper['categories'])}")
+                        st.markdown("**Abstract:**")
+                        st.caption(paper['abstract'][:500] + "..." if len(paper['abstract']) > 500 else paper['abstract'])
+                        st.markdown(f"[View on arXiv]({paper['url']})")
+                st.caption("")
         else:
             st.info("No papers found. Start by ingesting some papers above!")
     else:

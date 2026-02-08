@@ -35,7 +35,7 @@ class DigestService:
             base_url="https://openrouter.ai/api/v1",
             model="openai/gpt-5.2",
             temperature=0.3,
-            max_tokens=2000
+            max_tokens=1200
         )
         self.prompt = ChatPromptTemplate.from_template(DIGEST_PROMPT)
     

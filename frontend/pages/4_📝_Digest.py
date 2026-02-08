@@ -3,12 +3,23 @@ Digest Page - Generate and view weekly digests
 """
 import streamlit as st
 import requests
+import json
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Weekly Digest", page_icon="📝", layout="wide")
 
 import os
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
+
+
+def _safe_json(response):
+    """Parse JSON safely; avoids 'Expecting value: line 1 column 1' on empty or non-JSON body."""
+    if not response.text or not response.text.strip():
+        return None
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        return None
 
 st.title("📝 Weekly Digest")
 st.markdown("Generate LLM-powered weekly trend reports based on database analytics.")
@@ -44,17 +55,16 @@ with col1:
                     params={"week_start": week_start.isoformat()},
                     timeout=120
                 )
-                
-                if response.status_code == 200:
-                    result = response.json()
+                result = _safe_json(response)
+                if response.status_code == 200 and result:
                     st.success("✅ Digest generated successfully!")
-                    
-                    # Store in session state to display
                     st.session_state['generated_digest'] = result.get('content', '')
                     st.session_state['digest_week'] = str(week_start)
                     st.rerun()
+                elif response.status_code == 200:
+                    st.error("❌ Server returned empty or invalid response. Check backend logs.")
                 else:
-                    error_detail = response.json().get('detail', 'Unknown error')
+                    error_detail = (result or {}).get('detail', response.text or 'Unknown error')
                     st.error(f"❌ Error: {error_detail}")
             except requests.exceptions.Timeout:
                 st.error("❌ Request timed out. Try again.")
@@ -96,18 +106,20 @@ with col2:
         # Try to fetch latest from API
         try:
             response = requests.get(f"{API_URL}/digest/latest", timeout=30)
-            
-            if response.status_code == 200:
-                digest = response.json()
-                
-                st.info(f"📅 Week: {digest['week_start'][:10]} to {digest['week_end'][:10]}")
-                st.markdown(digest['content'])
-                
-                # Download button
+            digest = _safe_json(response)
+            if response.status_code == 200 and digest:
+                week_start_str = digest.get('week_start') or ''
+                week_end_str = digest.get('week_end') or ''
+                if isinstance(week_start_str, str) and len(week_start_str) >= 10:
+                    week_start_str = week_start_str[:10]
+                if isinstance(week_end_str, str) and len(week_end_str) >= 10:
+                    week_end_str = week_end_str[:10]
+                st.info(f"📅 Week: {week_start_str} to {week_end_str}")
+                st.markdown(digest.get('content', ''))
                 st.download_button(
                     label="📥 Download Markdown",
-                    data=digest['content'],
-                    file_name=f"digest_{digest['week_start'][:10]}.md",
+                    data=digest.get('content', ''),
+                    file_name=f"digest_{week_start_str}.md",
                     mime="text/markdown"
                 )
             elif response.status_code == 404:

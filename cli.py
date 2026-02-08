@@ -30,10 +30,10 @@ async def ingest_command_async(args):
         entity_repo = EntityRepository(db)
         
         # Initialize LLM service
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            print("❌ Error: GEMINI_API_KEY not found in environment variables.")
-            print("   Please add it to your .env file.")
+            print("❌ Error: OPENAI_API_KEY not found in environment variables.")
+            print("   Please add it to your .env file (use your OpenRouter API key).")
             return
         
         llm_service = LLMService(api_key=api_key)
@@ -53,12 +53,23 @@ async def ingest_command_async(args):
         print(f"   Limit: {args.limit}")
         print("-" * 50)
         
-        count = await service.fetch_and_save(query=args.query, max_results=args.limit)
+        count, saved_papers = await service.fetch_and_save(query=args.query, max_results=args.limit)
         
         db.commit()  # Commit all changes
         
         print("-" * 50)
         print(f"✅ Successfully ingested {count} papers with entity extraction.\n")
+        from collections import defaultdict
+        by_day = defaultdict(list)
+        for p in saved_papers:
+            day = (p["published_at"][:10] if isinstance(p["published_at"], str) else str(p["published_at"])[:10])
+            by_day[day].append(p)
+        for day in sorted(by_day.keys(), reverse=True):
+            print(f"📅 {day}")
+            for p in by_day[day]:
+                title_short = (p["title"][:72] + "…") if len(p["title"]) > 72 else p["title"]
+                print(f"   • {p['arxiv_id']}  {title_short}")
+            print()
     except Exception as e:
         db.rollback()
         print(f"❌ Error: {e}")
@@ -79,11 +90,11 @@ async def canonicalize_command_async():
         entity_repo = EntityRepository(db)
         
         # Get API key
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            print("❌ Error: GEMINI_API_KEY not found.")
+            print("❌ Error: OPENAI_API_KEY not found.")
             return
-        
+
         # Get all entities without canonical_id
         entities = entity_repo.get_entities_without_canonical()
         if not entities:
@@ -144,11 +155,11 @@ async def digest_command_async(args):
     
     db = SessionLocal()
     try:
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            print("❌ Error: GEMINI_API_KEY not found.")
+            print("❌ Error: OPENAI_API_KEY not found.")
             return
-        
+
         # Parse week_start date
         week_start = datetime.strptime(args.week_start, "%Y-%m-%d")
         week_end = week_start + timedelta(days=7)

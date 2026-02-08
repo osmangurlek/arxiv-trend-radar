@@ -61,16 +61,19 @@ async def generate_digest(
     db.add(digest)
     db.commit()
     
-    return {"week_start": week_start, "content": content}
+    return {
+        "week_start": week_start.isoformat() if hasattr(week_start, "isoformat") else str(week_start),
+        "content": content or "",
+    }
 
 @router.get("/latest")
 def get_latest_digest(db: Session = Depends(get_db)):
-    """Get the most recent digest"""
+    """Get the most recent digest. Returns JSON-serializable dates (ISO strings)."""
     digest = db.query(Digest).order_by(Digest.created_at.desc()).first()
     if not digest:
         raise HTTPException(status_code=404, detail="No digests found")
     return {
-        "week_start": digest.week_start,
-        "week_end": digest.week_end,
-        "content": digest.content_md
+        "week_start": digest.week_start.isoformat() if digest.week_start and hasattr(digest.week_start, "isoformat") else str(digest.week_start or ""),
+        "week_end": digest.week_end.isoformat() if digest.week_end and hasattr(digest.week_end, "isoformat") else str(digest.week_end or ""),
+        "content": digest.content_md or "",
     }

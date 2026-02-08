@@ -1,4 +1,5 @@
 import arxiv
+from datetime import datetime
 from backend.app.repositories.paper_repo import PaperRepository
 from backend.app.repositories.entity_repo import EntityRepository
 from backend.app.llm.entity_extraction import LLMService
@@ -16,7 +17,8 @@ class IngestionService:
     async def fetch_and_save(self, query: str, max_results: int = 10):
         """
         Fetches papers from arXiv, saves them to DB, extracts entities via LLM,
-        and saves entity relationships.
+        and saves entity relationships. Returns (count, list of saved papers with title, published_at, arxiv_id).
+        Papers are sorted newest first (by published_at desc).
         """
         client = arxiv.Client()
         search = arxiv.Search(
@@ -25,6 +27,10 @@ class IngestionService:
             sort_by=arxiv.SortCriterion.SubmittedDate
         )
         results = list(client.results(search))
+        # En yeniden en eskiye: published_at azalan sıra
+        results.sort(key=lambda r: r.published or datetime.min, reverse=True)
+
+        saved_papers = []
 
         for result in results:
             paper_data = {
@@ -39,7 +45,12 @@ class IngestionService:
 
             # 1. Save paper and get the object (for ID)
             paper = self.paper_repo.upsert_paper(paper_data)
-            
+            saved_papers.append({
+                "title": paper_data["title"],
+                "published_at": paper_data["published_at"].isoformat() if hasattr(paper_data["published_at"], "isoformat") else str(paper_data["published_at"]),
+                "arxiv_id": paper_data["arxiv_id"],
+            })
+
             # 2. Perform entity extraction with LLM (with error handling)
             try:
                 extraction = await self.llm_service.extract_entities(paper_data["abstract"])
@@ -57,7 +68,7 @@ class IngestionService:
             except Exception as e:
                 print(f"⚠️  Classification failed for paper {paper.id}: {e}")
 
-        return len(results)
+        return len(results), saved_papers
 
     def _save_extracted_entities(self, paper_id: int, extraction: PaperExtractionSchema):
         """

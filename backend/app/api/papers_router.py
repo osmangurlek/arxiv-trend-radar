@@ -29,7 +29,7 @@ def get_papers(
     if category:
         query = query.filter(Paper.categories.contains([category]))
     
-    return query.offset(skip).limit(limit).all()
+    return query.order_by(Paper.created_at.desc()).offset(skip).limit(limit).all()
 
 @router.get("/{paper_id}", response_model=PaperSchema)
 def get_paper(paper_id: int, db: Session = Depends(get_db)):
