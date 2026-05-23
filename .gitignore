@@ -40,3 +40,10 @@ nm-*.log
 
 # --- Streamlit ---
 .streamlit/config.toml
+
+# --- Node / React / Vite ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+.cache/

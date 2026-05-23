@@ -1,3 +1,4 @@
+import asyncio
 import arxiv
 from datetime import datetime
 from backend.app.repositories.paper_repo import PaperRepository
@@ -20,7 +21,7 @@ class IngestionService:
         and saves entity relationships. Returns (count, list of saved papers with title, published_at, arxiv_id).
         Papers are sorted newest first (by published_at desc).
         """
-        client = arxiv.Client()
+        client = arxiv.Client(num_retries=5, delay_seconds=5.0)
         search = arxiv.Search(
             query=query,
             max_results=max_results,
@@ -30,8 +31,9 @@ class IngestionService:
         # En yeniden en eskiye: published_at azalan sıra
         results.sort(key=lambda r: r.published or datetime.min, reverse=True)
 
-        saved_papers = []
-
+        # Phase 1: Save all papers to DB first (sync, no LLM yet)
+        papers_data = []
+        paper_objects = []
         for result in results:
             paper_data = {
                 "arxiv_id": result.entry_id,
@@ -42,31 +44,56 @@ class IngestionService:
                 "categories": result.categories,
                 "url": result.links[0].href
             }
-
-            # 1. Save paper and get the object (for ID)
             paper = self.paper_repo.upsert_paper(paper_data)
-            saved_papers.append({
-                "title": paper_data["title"],
-                "published_at": paper_data["published_at"].isoformat() if hasattr(paper_data["published_at"], "isoformat") else str(paper_data["published_at"]),
-                "arxiv_id": paper_data["arxiv_id"],
-            })
+            papers_data.append(paper_data)
+            paper_objects.append(paper)
 
-            # 2. Perform entity extraction with LLM (with error handling)
-            try:
-                extraction = await self.llm_service.extract_entities(paper_data["abstract"])
-                # 3. Save extracted entities to DB
-                self._save_extracted_entities(paper.id, extraction)
-            except Exception as e:
-                print(f"⚠️  Entity extraction failed for paper {paper.id}: {e}")
-                # Continue with next paper even if extraction fails
+        saved_papers = [
+            {
+                "title": pd["title"],
+                "published_at": pd["published_at"].isoformat() if hasattr(pd["published_at"], "isoformat") else str(pd["published_at"]),
+                "arxiv_id": pd["arxiv_id"],
+            }
+            for pd in papers_data
+        ]
 
-            # 4. Classify Paper
-            try:
-                classification = await self.classification_service.classify_paper(paper_data["abstract"])
-                for tag_item in classification.tags:
-                    self.paper_repo.add_paper_tag(paper.id, tag_item.tag, tag_item.confidence)
-            except Exception as e:
-                print(f"⚠️  Classification failed for paper {paper.id}: {e}")
+        # Phase 2: Run all LLM calls in parallel across papers
+        async def _llm_for_paper(paper_data, paper):
+            llm_results = await asyncio.gather(
+                self.llm_service.extract_entities(paper_data["abstract"]),
+                self.classification_service.classify_paper(paper_data["abstract"]),
+                return_exceptions=True
+            )
+            extraction = llm_results[0] if not isinstance(llm_results[0], Exception) else None
+            classification = llm_results[1] if not isinstance(llm_results[1], Exception) else None
+            if isinstance(llm_results[0], Exception):
+                print(f"⚠️  Entity extraction failed for paper {paper.id}: {llm_results[0]}")
+            if isinstance(llm_results[1], Exception):
+                print(f"⚠️  Classification failed for paper {paper.id}: {llm_results[1]}")
+            return paper, extraction, classification
+
+        llm_results = await asyncio.gather(
+            *[_llm_for_paper(pd, po) for pd, po in zip(papers_data, paper_objects)],
+            return_exceptions=True
+        )
+
+        # Phase 3: Save all LLM results to DB (sync, no concurrent session access)
+        for res in llm_results:
+            if isinstance(res, Exception):
+                print(f"⚠️  Unexpected LLM error: {res}")
+                continue
+            paper, extraction, classification = res
+            if extraction:
+                try:
+                    self._save_extracted_entities(paper.id, extraction)
+                except Exception as e:
+                    print(f"⚠️  Entity save failed for paper {paper.id}: {e}")
+            if classification:
+                try:
+                    for tag_item in classification.tags:
+                        self.paper_repo.add_paper_tag(paper.id, tag_item.tag, tag_item.confidence)
+                except Exception as e:
+                    print(f"⚠️  Tag save failed for paper {paper.id}: {e}")
 
         return len(results), saved_papers
 
